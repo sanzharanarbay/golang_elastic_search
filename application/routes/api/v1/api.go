@@ -7,21 +7,19 @@ import (
 	"github.com/sanzharanarbay/golang-elastic-search/application/controllers"
 	"github.com/sanzharanarbay/golang-elastic-search/application/repositories"
 	"github.com/sanzharanarbay/golang-elastic-search/application/services"
-	"log"
+	postElasticConf "github.com/sanzharanarbay/golang-elastic-search/application/utils/post"
 )
 
 func ApiRoutes(prefix string, router *gin.Engine) {
 	db := database.ConnectDB()
-	elastic := elasticSearch.NewElasticSearch()
-	if err := elastic.CreateIndex(); err != nil {
-		log.Fatalln(err)
-	}
+	postElasticConfig := postElasticConf.NewPostElasticConfig()
+	elasticClient := elasticSearch.NewElasticSearch(postElasticConfig.Index, postElasticConfig.Mapping)
 
 	apiGroup := router.Group(prefix)
 	{
 		dashboard := apiGroup.Group("/dashboard/posts")
 		{
-			postRepo := repositories.NewPostRepository(db)
+			postRepo := repositories.NewPostRepository(db, elasticClient)
 			postService := services.NewPostService(postRepo)
 			postController := controllers.NewPostController(postService)
 

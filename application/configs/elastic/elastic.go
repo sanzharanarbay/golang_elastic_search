@@ -1,94 +1,70 @@
 package elastic
 
 import (
+	"context"
 	"fmt"
 	"github.com/joho/godotenv"
+	"github.com/olivere/elastic"
 	"log"
 	"os"
-	"github.com/elastic/go-elasticsearch/v7"
-	"strconv"
 )
 
 type ElasticSearch struct {
-	client *elasticsearch.Client
-	index  string
-	alias  string
+	Client *elastic.Client
+	Index string
+	Context  context.Context
 }
 
-func NewElasticSearch() *ElasticSearch {
+func NewElasticSearch(index string, mapping string) *ElasticSearch {
 	e := godotenv.Load()
 	if e != nil {
 		log.Fatalf("Error loading .env file")
 	}
 
-	username := os.Getenv("ELASTIC_USER")
-	password := os.Getenv("ELASTIC_PASSWORD")
+	ctx := context.Background()
+
 	host := os.Getenv("ELASTIC_HOST")
 	port := os.Getenv("ELASTIC_PORT")
 
-	cfg := elasticsearch.Config{
-		Addresses: []string{
-			"https://" + host + ":" + port,
-		},
-		Username: username,
-		Password: password,
+	client, err := elastic.NewClient()
+	if err != nil {
+		// Handle error
+		panic(err)
 	}
 
-	client, err := elasticsearch.NewClient(cfg)
+	// Ping the Elasticsearch server to get e.g. the version number
+	_, _, err = client.Ping("http://" + host + ":" + port).Do(ctx)
 	if err != nil {
-		fmt.Println(err)
+		// Handle error
+		panic(err)
+	}
+
+	// Use the IndexExists service to check if a specified index exists.
+	exists, err := client.IndexExists(index).Do(ctx)
+	if err != nil {
+		// Handle error
+		panic(err)
+	}
+
+	if !exists {
+		// Create a new index.
+		createIndex, err := client.CreateIndex(index).BodyString(mapping).Do(ctx)
+		if err != nil {
+			// Handle error
+			panic(err)
+		}
+		if !createIndex.Acknowledged {
+			// Not acknowledged
+			log.Fatalln("index was not created in  Elastic Search!")
+		}
+
 	}
 
 	fmt.Println("Successfully connected to Elastic Search!")
 
 	return &ElasticSearch{
-		client: client,
+		Client: client,
+		Index: index,
+		Context: ctx,
 	}
-}
-
-func (e *ElasticSearch) CreateIndex() error {
-	env := godotenv.Load()
-	if env != nil {
-		log.Fatalf("Error loading .env file")
-	}
-	index := os.Getenv("ELASTIC_INDEX")
-
-	e.index = index
-	e.alias = index + "_alias"
-
-	res, err := e.client.Indices.Exists([]string{e.index})
-	if err != nil {
-		return fmt.Errorf("cannot check index existence: %w", err)
-	}
-	fmt.Println("statusCode - " + strconv.Itoa(res.StatusCode))
-	if res.StatusCode == 200 {
-		return nil
-	}
-	if res.StatusCode != 404 {
-		return fmt.Errorf("error in index existence response: %s", res.String())
-	}
-
-	res, err = e.client.Indices.Create(e.index)
-	if err != nil {
-		return fmt.Errorf("cannot create index: %w", err)
-	}
-	fmt.Println("Index created Successfully")
-	if res.IsError() {
-		return fmt.Errorf("error in index creation response: %s", res.String())
-	}
-
-	res, err = e.client.Indices.PutAlias([]string{e.index}, e.alias)
-	if err != nil {
-		return fmt.Errorf("cannot create index alias: %w", err)
-	}
-	if res.IsError() {
-		return fmt.Errorf("error in index alias creation response: %s", res.String())
-	}
-
-	return nil
-}
-
-// document represents a single document in Get API response body.
-type document struct {
-	Source interface{} `json:"_source"`
 }

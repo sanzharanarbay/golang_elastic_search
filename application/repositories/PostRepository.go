@@ -2,19 +2,24 @@ package repositories
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
+	elasticObj "github.com/sanzharanarbay/golang-elastic-search/application/configs/elastic"
 	"github.com/sanzharanarbay/golang-elastic-search/application/models"
 	"log"
+	"strconv"
 	"time"
 )
 
 type PostRepository struct {
 	dbClient *sql.DB
+	elastic  *elasticObj.ElasticSearch
 }
 
-func NewPostRepository(dbClient *sql.DB) *PostRepository {
+func NewPostRepository(dbClient *sql.DB, elastic  *elasticObj.ElasticSearch) *PostRepository {
 	return &PostRepository{
 		dbClient: dbClient,
+		elastic: elastic,
 	}
 }
 
@@ -63,12 +68,31 @@ func (p *PostRepository) GetAllPosts() (*[]models.Post, error) {
 }
 
 func (p *PostRepository) SavePost(post *models.Post) (bool, error) {
+	post.CreatedAt = time.Now().Local()
+	post.UpdatedAt = time.Now().Local()
 	sqlStatement := `INSERT into posts (title,content, category_id, created_at, updated_at) VALUES ($1, $2, $3, $4, $5)`
-	_, err := p.dbClient.Exec(sqlStatement, post.Title, post.Content, post.CategoryId, time.Now().Local(), time.Now().Local())
+	res, err := p.dbClient.Exec(sqlStatement, post.Title, post.Content, post.CategoryId, post.CreatedAt, post.UpdatedAt)
 	if err != nil {
 		log.Printf("ERROR EXEC INSERT QUERY - %s", err)
 		return false, err
 	}
+
+	documentID,_ :=res.LastInsertId()
+	body, _ := json.Marshal(post)
+
+	put1, err := p.elastic.Client.Index().
+		Index(p.elastic.Index).
+		Type("post").
+		Id(strconv.Itoa(int(documentID))).
+		BodyJson(body).
+		Do(p.elastic.Context)
+	if err != nil {
+		// Handle error
+		panic(err)
+	}
+
+	fmt.Printf("Indexed tweet %s to index %s, type %s\n", put1.Id, put1.Index, put1.Type)
+
 	return true, nil
 }
 
@@ -78,15 +102,45 @@ func (p *PostRepository) DeletePost(ID int) (bool, error) {
 		log.Printf("ERROR EXEC DELETE QUERY - %s", err)
 		return false, err
 	}
+
+	del1, err := p.elastic.Client.Delete().
+		Index(p.elastic.Index).
+		Type("post").
+		Id(strconv.Itoa(ID)).
+		Do(p.elastic.Context)
+	if err != nil {
+		// Handle error
+		panic(err)
+	}
+
+	fmt.Printf("Indexed tweet %s to index %s, type %s\n", del1.Id, del1.Index, del1.Type)
+
 	return true, nil
 }
 
 func (p *PostRepository) UpdatePost(post *models.Post, PostID int) (bool, error) {
+	post.UpdatedAt = time.Now().Local()
 	sqlStatement := `UPDATE posts SET title=$1, content=$2, category_id=$3, updated_at=$4 WHERE id=$5`
-	_, err := p.dbClient.Exec(sqlStatement, post.Title, post.Content, post.CategoryId, time.Now().Local(), PostID)
+	_, err := p.dbClient.Exec(sqlStatement, post.Title, post.Content, post.CategoryId, post.UpdatedAt, PostID)
 	if err != nil {
 		fmt.Printf("ERROR EXEC UPDATE QUERY - %s", err)
 	}
+
+	body, _ := json.Marshal(post)
+
+	put1, err := p.elastic.Client.Index().
+		Index(p.elastic.Index).
+		Type("post").
+		Id(strconv.Itoa(PostID)).
+		BodyJson(body).
+		Do(p.elastic.Context)
+	if err != nil {
+		// Handle error
+		panic(err)
+	}
+
+	fmt.Printf("Indexed tweet %s to index %s, type %s\n", put1.Id, put1.Index, put1.Type)
+
 	return true, nil
 }
 
