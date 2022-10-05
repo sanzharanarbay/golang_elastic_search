@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/joho/godotenv"
-	"github.com/olivere/elastic"
+	"github.com/olivere/elastic/v7"
 	"log"
 	"os"
 )
@@ -21,12 +21,15 @@ func NewElasticSearch(index string, mapping string) *ElasticSearch {
 		log.Fatalf("Error loading .env file")
 	}
 
-	ctx := context.Background()
-
 	host := os.Getenv("ELASTIC_HOST")
 	port := os.Getenv("ELASTIC_PORT")
 
-	client, err := elastic.NewClient()
+	client, err := elastic.NewClient(
+		elastic.SetURL("http://" + host + ":" + port),
+		)
+
+	ctx := context.TODO()
+
 	if err != nil {
 		// Handle error
 		panic(err)

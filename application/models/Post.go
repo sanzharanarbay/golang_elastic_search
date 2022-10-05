@@ -10,3 +10,11 @@ type Post struct {
 	CreatedAt   time.Time `json:"created_at,omitempty"`
 	UpdatedAt   time.Time `json:"updated_at,omitempty"`
 }
+
+type PostElastic struct{
+	Title        string    `json:"title"`
+	Content        string   `json:"content"`
+	CategoryId int64    `json:"category_id"`
+	CreatedAt   string `json:"created_at,omitempty"`
+	UpdatedAt   string `json:"updated_at,omitempty"`
+}

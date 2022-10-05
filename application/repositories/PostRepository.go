@@ -2,7 +2,6 @@ package repositories
 
 import (
 	"database/sql"
-	"encoding/json"
 	"fmt"
 	elasticObj "github.com/sanzharanarbay/golang-elastic-search/application/configs/elastic"
 	"github.com/sanzharanarbay/golang-elastic-search/application/models"
@@ -70,28 +69,41 @@ func (p *PostRepository) GetAllPosts() (*[]models.Post, error) {
 func (p *PostRepository) SavePost(post *models.Post) (bool, error) {
 	post.CreatedAt = time.Now().Local()
 	post.UpdatedAt = time.Now().Local()
-	sqlStatement := `INSERT into posts (title,content, category_id, created_at, updated_at) VALUES ($1, $2, $3, $4, $5)`
-	res, err := p.dbClient.Exec(sqlStatement, post.Title, post.Content, post.CategoryId, post.CreatedAt, post.UpdatedAt)
+	lastInsertId := 0
+	sqlStatement := `INSERT into posts (title,content, category_id, created_at, updated_at) VALUES ($1, $2, $3, $4, $5) RETURNING id`
+	err := p.dbClient.QueryRow(sqlStatement, post.Title, post.Content, post.CategoryId, post.CreatedAt, post.UpdatedAt).Scan(&lastInsertId)
 	if err != nil {
-		log.Printf("ERROR EXEC INSERT QUERY - %s", err)
-		return false, err
+		panic(err)
+	}
+	object := models.PostElastic{
+		Title: post.Title,
+		Content: post.Content,
+		CategoryId: post.CategoryId,
+		CreatedAt: post.CreatedAt.Format("2006-01-02"),
+		UpdatedAt: post.UpdatedAt.Format("2006-01-02"),
 	}
 
-	documentID,_ :=res.LastInsertId()
-	body, _ := json.Marshal(post)
+	// with map
+	//object := map[string]interface{}{
+	//	"title":        post.Title,
+	//	"content":       post.Content,
+	//	"category_id":post.CategoryId,
+	//	"created_at": post.CreatedAt.Format("2006-01-02"),
+	//	"updated_at": post.UpdatedAt.Format("2006-01-02"),
+	//}
 
 	put1, err := p.elastic.Client.Index().
 		Index(p.elastic.Index).
-		Type("post").
-		Id(strconv.Itoa(int(documentID))).
-		BodyJson(body).
+		Id(strconv.Itoa(lastInsertId)).
+		BodyJson(object).
 		Do(p.elastic.Context)
 	if err != nil {
 		// Handle error
+		fmt.Println(err.Error())
 		panic(err)
 	}
 
-	fmt.Printf("Indexed tweet %s to index %s, type %s\n", put1.Id, put1.Index, put1.Type)
+	fmt.Printf("Created post %s to index %s, type %s\n", put1.Id, put1.Index, put1.Type)
 
 	return true, nil
 }
@@ -99,13 +111,11 @@ func (p *PostRepository) SavePost(post *models.Post) (bool, error) {
 func (p *PostRepository) DeletePost(ID int) (bool, error) {
 	_, err := p.dbClient.Exec(`DELETE FROM posts WHERE id=$1`, ID)
 	if err != nil {
-		log.Printf("ERROR EXEC DELETE QUERY - %s", err)
-		return false, err
+		panic(err)
 	}
 
 	del1, err := p.elastic.Client.Delete().
 		Index(p.elastic.Index).
-		Type("post").
 		Id(strconv.Itoa(ID)).
 		Do(p.elastic.Context)
 	if err != nil {
@@ -113,7 +123,9 @@ func (p *PostRepository) DeletePost(ID int) (bool, error) {
 		panic(err)
 	}
 
-	fmt.Printf("Indexed tweet %s to index %s, type %s\n", del1.Id, del1.Index, del1.Type)
+	p.elastic.Client.Refresh(p.elastic.Index)
+
+	fmt.Printf("Deleted post %s to index %s, type %s\n", del1.Id, del1.Index, del1.Type)
 
 	return true, nil
 }
@@ -126,20 +138,26 @@ func (p *PostRepository) UpdatePost(post *models.Post, PostID int) (bool, error)
 		fmt.Printf("ERROR EXEC UPDATE QUERY - %s", err)
 	}
 
-	body, _ := json.Marshal(post)
+	object := models.PostElastic{
+		Title: post.Title,
+		Content: post.Content,
+		CategoryId: post.CategoryId,
+		UpdatedAt: post.UpdatedAt.Format("2006-01-02"),
+	}
 
-	put1, err := p.elastic.Client.Index().
+	put1, err := p.elastic.Client.Update().
 		Index(p.elastic.Index).
-		Type("post").
 		Id(strconv.Itoa(PostID)).
-		BodyJson(body).
+		Doc(object).
 		Do(p.elastic.Context)
 	if err != nil {
 		// Handle error
 		panic(err)
 	}
 
-	fmt.Printf("Indexed tweet %s to index %s, type %s\n", put1.Id, put1.Index, put1.Type)
+	p.elastic.Client.Refresh(p.elastic.Index)
+
+	fmt.Printf("Updated post %s to index %s, type %s\n", put1.Id, put1.Index, put1.Type)
 
 	return true, nil
 }
