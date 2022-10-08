@@ -2,7 +2,9 @@ package repositories
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
+	elasticLib "github.com/olivere/elastic/v7"
 	elasticObj "github.com/sanzharanarbay/golang-elastic-search/application/configs/elastic"
 	"github.com/sanzharanarbay/golang-elastic-search/application/models"
 	"log"
@@ -160,5 +162,42 @@ func (p *PostRepository) UpdatePost(post *models.Post, PostID int) (bool, error)
 	fmt.Printf("Updated post %s to index %s, type %s\n", put1.Id, put1.Index, put1.Type)
 
 	return true, nil
+}
+
+func (p *PostRepository) SearchPost(body string) (*[]models.PostElastic, error) {
+	data := models.PostElastic{}
+	json.Unmarshal([]byte(body), &data)
+	var postList []models.PostElastic
+	matchQuery := elasticLib.NewMatchQuery("title", data.Title)
+	boolQuery := elasticLib.NewBoolQuery().Must(matchQuery)
+
+	if data.Content != "" {
+		boolQuery.Must(elasticLib.NewMatchQuery("content", data.Content))
+	}
+	if data.CategoryId > 0 {
+		boolQuery.Must(elasticLib.NewMatchQuery("category_id", data.CategoryId))
+	}
+
+	searchResult, err := p.elastic.Client.Search().
+		Index(p.elastic.Index).
+		Query(boolQuery).
+		From(0). // Starting from this result
+		Size(100).  // Limit of responds
+		Do(p.elastic.Context)         // execute
+
+	if err != nil {
+		panic(err)
+	}
+
+
+	for _, hit := range searchResult.Hits.Hits {
+		var post models.PostElastic
+		err := json.Unmarshal(hit.Source, &post)
+		if err != nil {
+			panic(err)
+		}
+		 postList= append(postList, post)
+	}
+	return &postList, nil
 }
 

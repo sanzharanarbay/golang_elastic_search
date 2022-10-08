@@ -6,6 +6,7 @@ import (
 	"github.com/sanzharanarbay/golang-elastic-search/application/models"
 	"github.com/sanzharanarbay/golang-elastic-search/application/requests"
 	"github.com/sanzharanarbay/golang-elastic-search/application/services"
+	"io/ioutil"
 	"net/http"
 	"strconv"
 )
@@ -111,4 +112,15 @@ func (h *PostController) UpdatePost(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusCreated, updated)
+}
+
+func (h *PostController) SearchPosts(c *gin.Context) {
+	bodyAsByteArray, _ := ioutil.ReadAll(c.Request.Body)
+	jsonBody := string(bodyAsByteArray)
+
+	resp, err := h.postService.SearchPost(jsonBody)
+	if err != nil {
+		fmt.Printf("ERROR - %s", err)
+	}
+	c.JSON(http.StatusCreated, resp)
 }

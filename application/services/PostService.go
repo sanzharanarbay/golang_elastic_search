@@ -57,3 +57,7 @@ func (s *PostService) UpdatePost(post *models.Post, ID int) (bool, error) {
 	return state, err
 }
 
+func (s *PostService) SearchPost(body string) (*[]models.PostElastic, error) {
+	state, err := s.postRepository.SearchPost(body)
+	return state, err
+}

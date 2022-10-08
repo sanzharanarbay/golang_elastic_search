@@ -28,6 +28,7 @@ func ApiRoutes(prefix string, router *gin.Engine) {
 			dashboard.POST("/create", postController.CreatePost)
 			dashboard.PUT("/update/:id", postController.UpdatePost)
 			dashboard.DELETE("/delete/:id", postController.DeletePost)
+			dashboard.POST("/search", postController.SearchPosts)
 		}
 	}
 }
