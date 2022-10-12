@@ -1,6 +1,6 @@
 FROM golang:1.16-alpine as builder
 
-ENV GO111MODULE=on
+#ENV GO111MODULE=on
 
 WORKDIR /app
 
@@ -10,8 +10,8 @@ RUN apk update && apk upgrade && \
     apk add --no-cache bash git openssh
 
 # prevent the re-installation of vendors at every change in the source code
-COPY ./go.mod go.sum ./
-RUN go mod download && go mod verify && go mod vendor
+COPY go.mod go.sum ./
+RUN go mod download
 
 # Copy and build the app
 COPY . .

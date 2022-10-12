@@ -3,7 +3,7 @@ version: "3.7"
 services:
   db:
     image: postgres:10.1
-    container_name: repo_postgres
+    container_name: app_postgres
     restart: always
     tty: true
     ports:
@@ -15,11 +15,39 @@ services:
       POSTGRES_HOST: ${DB_HOST}
     volumes:
       - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - database_postgres:/var/lib/postgresql/data
     networks:
       - app-network
 
-  app:
-    container_name:  repo_app
+  elasticsearch:
+    image: elasticsearch:8.2.2
+    container_name: app_elasticsearch
+    restart: always
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+    volumes:
+      - elasticsearch-data:/usr/share/elasticsearch/data
+    ports:
+      - 9200:9200
+    networks:
+      - app-network
+
+  kibana:
+    image: kibana:8.2.2
+    container_name: app_kibana
+    restart: always
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    ports:
+      - 5601:5601
+    depends_on:
+      - elasticsearch
+    networks:
+      - app-network
+
+  golang_application:
+    container_name:  app_container
     build:
       context: ./
       dockerfile: dockerfiles/app.Dockerfile
@@ -28,13 +56,15 @@ services:
     restart: on-failure
     depends_on:
       - db
+      - elasticsearch
+      - kibana
     volumes:
       - .:/app/
     networks:
       - app-network
 
   phppgadmin:
-    container_name: repo_phppgadmin
+    container_name: app_phppgadmin
     image: dockage/phppgadmin:latest
     environment:
       - PHP_PG_ADMIN_SERVER_HOST=db
@@ -53,5 +83,7 @@ networks:
     driver: bridge
 
 volumes:
-  dbdata:
+  database_postgres:
+    driver: local
+  elasticsearch-data:
     driver: local
