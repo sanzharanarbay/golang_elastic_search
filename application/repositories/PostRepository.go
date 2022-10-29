@@ -26,10 +26,10 @@ func NewPostRepository(dbClient *sql.DB, elastic  *elasticObj.ElasticSearch) *Po
 
 type PostRepositoryInterface interface {
 	GetPostById(ID int) (*models.Post, error)
-	GetAllPosts() ([]*models.Post, error)
+	GetAllPosts() (* []models.Post, error)
 	SavePost(*models.Post) (bool, error)
 	DeletePost(ID int) (bool, error)
-	UpdatePost(*models.Post) (bool, error)
+	UpdatePost(post *models.Post, PostID int) (bool, error)
 }
 
 func (p *PostRepository) GetPostById(ID int) (*models.Post, error) {
